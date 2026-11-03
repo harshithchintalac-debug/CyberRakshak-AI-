@@ -15,7 +15,7 @@ Being upfront about this matters more than pretending it's all done:
 |---|---|
 | URL / Email / SMS / Password heuristic engines | **Real**, deterministic rule-based logic, ported identically to Python |
 | JWT auth, MongoDB models, password hashing (bcrypt) | **Real** |
-| Groq or Ollama streaming chat, system prompt, conversation history | **Real** integration (SSE streaming) — uses Groq when `GROQ_API_KEY` is set, otherwise Ollama; falls back to a labeled Demo Mode reply if neither is available |
+| General-purpose Groq or Ollama assistant, streaming chat, conversation history | **Real** integration (SSE streaming) — answers across topics, with cybersecurity expertise; uses Groq when `GROQ_API_KEY` is set, otherwise Ollama; falls back to a labeled Demo Mode reply if neither is available |
 | Multilingual chat | **Real** — the selected language is included in the system prompt for either provider |
 | Voice Assistant (STT/TTS) | **Real**, using the browser's built-in Web Speech API (`SpeechRecognition` / `speechSynthesis`) — works out of the box in Chrome/Edge with zero extra installs. Swap in a server-side Whisper/Coqui pipeline later if you need offline or non-Chromium support (see below) |
 | Image EXIF/metadata extraction | **Real** (Pillow) |
