@@ -54,6 +54,16 @@ app.include_router(admin.router)
 app.include_router(content.router)
 
 
+@app.get("/")
+async def root():
+    return {"status": "ok", "service": "CyberRakshak AI"}
+
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
+
+
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "app": settings.APP_NAME}
