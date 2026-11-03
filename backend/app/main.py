@@ -54,7 +54,7 @@ app.include_router(admin.router)
 app.include_router(content.router)
 
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 async def root():
     return {"status": "ok", "service": "CyberRakshak AI"}
 
