@@ -53,7 +53,7 @@ SUPPORTED_LANGUAGES: dict[str, tuple[str, str, str]] = {
     "pa-IN": ("Punjabi", "ਪੰਜਾਬੀ", "pa"),
 }
 
-BASE_SYSTEM_PROMPT = """You are CyberRakshak AI Assistant, a friendly cybersecurity assistant. Answer the user's question simply and directly. Keep your reply concise and use markdown formatting to organize your response."""
+BASE_SYSTEM_PROMPT = """You are CyberRakshak AI, a cybersecurity assistant. Answer concisely using markdown."""
 
 
 def _language_directive(language_code: Optional[str]) -> str:
@@ -117,7 +117,7 @@ async def get_working_model(requested_model: Optional[str] = None) -> str:
 
 def _build_messages(history: list[dict], user_message: str, language_code: Optional[str]) -> list[dict]:
     messages = [{"role": "system", "content": _build_system_prompt(language_code)}]
-    for m in history[-6:]:  # keep recent context only, bounded window
+    for m in history[-4:]:  # keep recent context only, bounded window
         messages.append({"role": m["role"], "content": m["content"]})
     messages.append({"role": "user", "content": user_message})
     return messages

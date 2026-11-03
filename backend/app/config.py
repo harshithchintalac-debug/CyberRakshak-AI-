@@ -35,8 +35,8 @@ class Settings(BaseSettings):
 
     # --- Ollama ---
     OLLAMA_HOST: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "llama3.1"
-    OLLAMA_TIMEOUT_SECONDS: int = 120
+    OLLAMA_MODEL: str = "llama3.2:1b"
+    OLLAMA_TIMEOUT_SECONDS: int = 30
     OLLAMA_ENABLED: bool = True
 
     # Generation determinism/quality. Low temperature + a fixed seed means the
@@ -47,8 +47,8 @@ class Settings(BaseSettings):
     OLLAMA_TEMPERATURE: float = 0.25
     OLLAMA_TOP_P: float = 0.9
     OLLAMA_SEED: int = 42
-    OLLAMA_NUM_CTX: int = 1536
-    OLLAMA_NUM_PREDICT: int = 512
+    OLLAMA_NUM_CTX: int = 1024
+    OLLAMA_NUM_PREDICT: int = 256
 
     # In-memory response cache for identical first-turn prompts (e.g. the
     # "Quick Prompts" buttons). Avoids redundant Ollama calls and makes
