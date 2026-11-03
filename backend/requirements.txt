@@ -16,6 +16,7 @@ numpy>=1.26.0
 python-dotenv==1.0.1
 email-validator==2.2.0
 langdetect==1.0.9
+groq==1.7.0
 
 # --- Optional heavy packages (install locally if needed) ---
 # These are NOT required — the code has try/except fallbacks for all of them.

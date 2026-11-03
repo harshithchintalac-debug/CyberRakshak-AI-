@@ -11,6 +11,7 @@ from app.auth.dependencies import get_current_user
 from app.database import conversations_col, chat_messages_col
 from app.models.scan import ChatMessageIn, ConversationRename
 from app.services.ollama_service import stream_chat, is_ollama_available
+from app.services.groq_service import is_groq_available
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 logger = logging.getLogger("cyberrakshak.chat")
@@ -18,8 +19,14 @@ logger = logging.getLogger("cyberrakshak.chat")
 
 @router.get("/status")
 async def ollama_status():
-    available = await is_ollama_available()
-    return {"ollama_available": available}
+    groq_available = await is_groq_available()
+    ollama_available = await is_ollama_available()
+    provider = "groq" if groq_available else "ollama" if ollama_available else None
+    return {
+        "ai_available": provider is not None,
+        "provider": provider,
+        "ollama_available": ollama_available,
+    }
 
 
 @router.get("/tts")

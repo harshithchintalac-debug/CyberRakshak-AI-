@@ -1,10 +1,8 @@
 """
-Dedicated Ollama integration module. All Ollama calls go through this file —
-routers never talk to Ollama directly. This keeps model selection, the
-system prompt, streaming, caching, and error handling in one modular,
-swappable place (per the brief's "modular so different locally hosted
-models can be configured through backend environment variables"
-requirement).
+Chat-provider integration module. All Groq and Ollama calls go through this
+file — routers never talk to either provider directly. This keeps model
+selection, the system prompt, streaming, caching, and error handling in one
+modular, swappable place.
 
 Root causes fixed here (see PR description / README for details):
   1. Inconsistent answers  -> Ollama was called with no `options`, so it used
@@ -20,7 +18,7 @@ Root causes fixed here (see PR description / README for details):
      retrying once with a firmer instruction if not.
   4. Performance            -> duplicate/identical prompts (e.g. the Quick
      Prompt buttons) now hit a small in-memory TTL cache, and concurrent
-     identical requests are coalesced instead of hitting Ollama twice.
+     identical requests are coalesced instead of hitting a provider twice.
 """
 import asyncio
 import hashlib
@@ -30,8 +28,10 @@ import time
 from typing import AsyncGenerator, Optional
 
 import httpx
+from groq import APIError as GroqAPIError
 
 from app.config import settings
+from app.services.groq_service import complete_groq_chat, stream_groq_chat
 
 logger = logging.getLogger("cyberrakshak.ollama")
 
@@ -53,7 +53,10 @@ SUPPORTED_LANGUAGES: dict[str, tuple[str, str, str]] = {
     "pa-IN": ("Punjabi", "ਪੰਜਾਬੀ", "pa"),
 }
 
-BASE_SYSTEM_PROMPT = """You are CyberRakshak AI, a cybersecurity assistant. Answer concisely using markdown."""
+BASE_SYSTEM_PROMPT = """You are CyberRakshak AI, a cybersecurity assistant. Answer concisely using markdown.
+Give practical, defensive guidance for cybersecurity threats and account incidents.
+Never ask users to share passwords, one-time codes, API keys, or other private credentials.
+For active incidents, prioritize immediate steps to limit harm and secure affected accounts."""
 
 
 def _language_directive(language_code: Optional[str]) -> str:
@@ -235,6 +238,46 @@ async def _stream_ollama(messages: list[dict], model_name: str) -> AsyncGenerato
                     break
 
 
+async def _stream_with_provider_fallback(
+    messages: list[dict],
+    model_name: str,
+    use_groq: bool,
+) -> AsyncGenerator[str, None]:
+    if not use_groq:
+        async for chunk in _stream_ollama(messages, model_name):
+            yield chunk
+        return
+
+    try:
+        async for chunk in stream_groq_chat(messages, model_name):
+            yield chunk
+    except (httpx.HTTPError, GroqAPIError):
+        if not settings.OLLAMA_ENABLED:
+            raise
+        logger.warning("Groq request failed; trying the configured Ollama provider")
+        ollama_model = await get_working_model()
+        async for chunk in _stream_ollama(messages, ollama_model):
+            yield chunk
+
+
+async def _complete_with_provider_fallback(
+    messages: list[dict],
+    model_name: str,
+    use_groq: bool,
+) -> str:
+    if not use_groq:
+        return await _call_ollama_once(messages, model_name)
+
+    try:
+        return await complete_groq_chat(messages, model_name)
+    except (httpx.HTTPError, GroqAPIError):
+        if not settings.OLLAMA_ENABLED:
+            raise
+        logger.warning("Groq request failed; trying the configured Ollama provider")
+        ollama_model = await get_working_model()
+        return await _call_ollama_once(messages, ollama_model)
+
+
 def _chunk_text(text: str, chunk_size: int = 64) -> AsyncGenerator[str, None]:
     """Splits an already-complete response into small pieces so the client
     still gets an incremental "typing" effect even though we generated the
@@ -258,19 +301,21 @@ async def stream_chat(
     Streams response tokens as they're generated (or, for verified-language
     replies, as simulated incremental chunks). Yields plain text chunks
     (caller wraps them as SSE). Falls back to a clearly-labeled demo response
-    if Ollama is unreachable.
+    if the selected provider is unreachable.
     """
-    model_name = await get_working_model(model)
+    use_groq = bool(settings.GROQ_API_KEY)
+    model_name = settings.GROQ_MODEL if use_groq else await get_working_model(model)
     language_code = language or "auto"
     is_new_conversation = len(history) == 0
 
-    if not settings.OLLAMA_ENABLED:
+    if not use_groq and not settings.OLLAMA_ENABLED:
         async for chunk in _demo_fallback_stream(user_message, language_code):
             yield chunk
         return
 
     # --- Cache lookup (fresh conversations only) ---------------------------
-    cache_key = _cache_key(model_name, language_code, user_message) if is_new_conversation else None
+    provider_model = f"{'groq' if use_groq else 'ollama'}:{model_name}"
+    cache_key = _cache_key(provider_model, language_code, user_message) if is_new_conversation else None
     if cache_key:
         cached = _cache_get(cache_key)
         if cached is not None:
@@ -305,11 +350,16 @@ async def stream_chat(
         if not needs_verification:
             # Fast path: real token-by-token streaming straight to the client.
             try:
-                async for chunk in _stream_ollama(messages, model_name):
+                async for chunk in _stream_with_provider_fallback(messages, model_name, use_groq):
                     full_reply += chunk
                     yield chunk
-            except (httpx.ConnectError, httpx.TimeoutException, OllamaUnavailableError) as e:
-                logger.warning("Ollama unreachable (%s) — falling back to demo response", type(e).__name__)
+            except (httpx.HTTPError, GroqAPIError, OllamaUnavailableError) as e:
+                provider = "Groq" if use_groq else "Ollama"
+                logger.warning(
+                    "%s unavailable (%s) — falling back to demo response",
+                    provider,
+                    type(e).__name__,
+                )
                 async for chunk in _demo_fallback_stream(user_message, language_code):
                     yield chunk
                 return
@@ -318,7 +368,7 @@ async def stream_chat(
             # once with a firmer instruction if it's wrong, THEN simulate
             # streaming so the UI still feels responsive.
             try:
-                full_reply = await _call_ollama_once(messages, model_name)
+                full_reply = await _complete_with_provider_fallback(messages, model_name, use_groq)
                 _, _, expected_iso = SUPPORTED_LANGUAGES[language_code]
                 if not _detected_language_matches(full_reply, expected_iso):
                     logger.info("Reply language mismatch for %s — retrying once", language_code)
@@ -334,14 +384,19 @@ async def stream_chat(
                             ),
                         },
                     ]
-                    full_reply = await _call_ollama_once(retry_messages, model_name)
-            except (httpx.ConnectError, httpx.TimeoutException) as e:
-                logger.warning("Ollama unreachable (%s) — falling back to demo response", type(e).__name__)
+                    full_reply = await _complete_with_provider_fallback(retry_messages, model_name, use_groq)
+            except httpx.HTTPStatusError as e:
+                logger.error("Ollama returned status %s", e.response.status_code)
                 async for chunk in _demo_fallback_stream(user_message, language_code):
                     yield chunk
                 return
-            except httpx.HTTPStatusError as e:
-                logger.error("Ollama returned status %s", e.response.status_code)
+            except (httpx.HTTPError, GroqAPIError) as e:
+                provider = "Groq" if use_groq else "Ollama"
+                logger.warning(
+                    "%s unavailable (%s) — falling back to demo response",
+                    provider,
+                    type(e).__name__,
+                )
                 async for chunk in _demo_fallback_stream(user_message, language_code):
                     yield chunk
                 return
@@ -365,20 +420,20 @@ async def stream_chat(
 # Offline demo fallback
 # ---------------------------------------------------------------------------
 _DEMO_FALLBACK_TEXT_EN = (
-    "**[Demo Mode — Ollama is not running locally]**\n\n"
-    "I can't reach the local AI engine right now, so here's a general safety note instead of a "
+    "**[Demo Mode — AI provider is unavailable]**\n\n"
+    "I can't reach the AI service right now, so here's a general safety note instead of a "
     "live AI-generated answer:\n\n"
     "- Never share OTPs or passwords with anyone.\n"
     "- Verify suspicious links using the Threat Scanner.\n"
     "- If you've already been affected, check the Incident Response Guide for step-by-step help.\n\n"
     "*(Your message was: \"{msg}\")*\n\n"
-    "To enable real AI responses, install Ollama and run `ollama pull {model}`, then restart the "
-    "backend."
+    "To enable real AI responses, configure `GROQ_API_KEY` on the backend, or start Ollama and "
+    "run `ollama pull {model}`."
 )
 
 
 async def _demo_fallback_stream(user_message: str, language_code: str) -> AsyncGenerator[str, None]:
-    """Clearly-labeled fallback used when Ollama isn't running locally, so the
+    """Clearly-labeled fallback used when no AI provider is reachable, so the
     product still demos end-to-end (per Demo Mode requirement). Demo mode
     itself is English-only (translating safety-critical guidance without a
     live model risks incorrect translations), but we say so explicitly so the
@@ -387,7 +442,7 @@ async def _demo_fallback_stream(user_message: str, language_code: str) -> AsyncG
     if language_code != "auto" and language_code != "en-US" and language_code in SUPPORTED_LANGUAGES:
         native_name = SUPPORTED_LANGUAGES[language_code][1]
         text += (
-            f"\n\n*(Demo mode currently only available in English. Connect Ollama for full "
+            f"\n\n*(Demo mode currently only available in English. Connect an AI provider for full "
             f"{native_name} responses.)*"
         )
     for chunk in text.split(" "):

@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     OLLAMA_TIMEOUT_SECONDS: int = 30
     OLLAMA_ENABLED: bool = True
 
+    # --- Groq hosted inference ---
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "openai/gpt-oss-20b"
+    GROQ_TIMEOUT_SECONDS: int = 120
+    GROQ_MAX_COMPLETION_TOKENS: int = 1024
+
     # Generation determinism/quality. Low temperature + a fixed seed means the
     # same prompt reliably produces (near-)identical answers, which is what
     # "consistent AI responses" requires. Set OLLAMA_TEMPERATURE higher (and/or

@@ -1,6 +1,6 @@
 # CyberRakshak AI v2 — Full-Stack Build
 
-A real, running full-stack application: **FastAPI + MongoDB backend**, **React + TypeScript + Tailwind frontend**, JWT auth, an **Ollama-powered multilingual assistant**, and **AI image/video content analyzers**.
+A real, running full-stack application: **FastAPI + MongoDB backend**, **React + TypeScript + Tailwind frontend**, JWT auth, a **Groq- or Ollama-powered multilingual assistant**, and **AI image/video content analyzers**.
 
 This is genuinely functional, not a mockup — verified in this delivery:
 - Backend imports cleanly and registers **40 real API routes** (`uvicorn app.main:app`)
@@ -15,8 +15,8 @@ Being upfront about this matters more than pretending it's all done:
 |---|---|
 | URL / Email / SMS / Password heuristic engines | **Real**, deterministic rule-based logic, ported identically to Python |
 | JWT auth, MongoDB models, password hashing (bcrypt) | **Real** |
-| Ollama streaming chat, system prompt, conversation history | **Real** integration (SSE streaming) — falls back to a labeled Demo Mode reply if Ollama isn't running |
-| Multilingual chat | **Real** — Ollama replies in whatever language/mix the user writes in, since that's a native LLM capability; a manual language selector is also provided |
+| Groq or Ollama streaming chat, system prompt, conversation history | **Real** integration (SSE streaming) — uses Groq when `GROQ_API_KEY` is set, otherwise Ollama; falls back to a labeled Demo Mode reply if neither is available |
+| Multilingual chat | **Real** — the selected language is included in the system prompt for either provider |
 | Voice Assistant (STT/TTS) | **Real**, using the browser's built-in Web Speech API (`SpeechRecognition` / `speechSynthesis`) — works out of the box in Chrome/Edge with zero extra installs. Swap in a server-side Whisper/Coqui pipeline later if you need offline or non-Chromium support (see below) |
 | Image EXIF/metadata extraction | **Real** (Pillow) |
 | AI-generated image/video probability score | **Heuristic placeholder**, clearly marked `demo: true` in every response. There is no trained AI-image-detector model wired in — see "Swapping in a real detector" below |
@@ -75,6 +75,10 @@ cyberrakshak-v2/
   ollama serve
   ```
   If Ollama isn't running, the assistant still works — it replies with a clearly-labeled Demo Mode message instead of crashing.
+
+### Using Groq for deployed chat
+
+Set `GROQ_API_KEY` in the backend host's environment settings (for example, Render); never commit the key to GitHub or put it in frontend variables. Groq is selected automatically when the key is configured. `GROQ_MODEL` defaults to `openai/gpt-oss-20b` and can be changed to another model enabled for your Groq account. Redeploy the backend after setting these variables. Without a Groq key, the backend uses Ollama if available, then a labeled Demo Mode response.
 
 ### 2. Backend
 ```bash

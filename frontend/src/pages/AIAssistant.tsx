@@ -57,7 +57,8 @@ export default function AIAssistant() {
   const [input, setInput] = useState('')
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [streaming, setStreaming] = useState(false)
-  const [ollamaUp, setOllamaUp] = useState<boolean | null>(null)
+  const [aiProvider, setAiProvider] = useState<string | null>(null)
+  const [aiStatusLoaded, setAiStatusLoaded] = useState(false)
   const [lang, setLang] = useState(() => localStorage.getItem(LANG_STORAGE_KEY) || 'en-US')
   const [autoSpeak, setAutoSpeak] = useState(voiceMode)
   const [voiceState, setVoiceState] = useState<'idle' | 'listening' | 'speaking'>('idle')
@@ -73,7 +74,9 @@ export default function AIAssistant() {
   const activeAudioRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
-    api.chatStatus().then(r => setOllamaUp(r.ollama_available)).catch(() => setOllamaUp(false))
+    api.chatStatus()
+      .then(r => { setAiProvider(r.provider); setAiStatusLoaded(true) })
+      .catch(() => { setAiProvider(null); setAiStatusLoaded(true) })
     loadVoices().then(v => setVoices(v))
     return () => {
       abortRef.current?.abort()
@@ -355,11 +358,11 @@ export default function AIAssistant() {
           <h1 className="font-display text-2xl font-bold">CyberRakshak Assistant</h1>
         </div>
         <div className="flex items-center gap-2">
-          {ollamaUp === false && (
-            <span className="text-[11.5px] px-3 py-1.5 rounded-full bg-warning/15 text-warning font-medium">Demo Mode — Ollama not detected</span>
+          {aiStatusLoaded && !aiProvider && (
+            <span className="text-[11.5px] px-3 py-1.5 rounded-full bg-warning/15 text-warning font-medium">Demo Mode — AI provider unavailable</span>
           )}
-          {ollamaUp === true && (
-            <span className="text-[11.5px] px-3 py-1.5 rounded-full bg-safe/15 text-safe font-medium">● Ollama connected</span>
+          {aiProvider && (
+            <span className="text-[11.5px] px-3 py-1.5 rounded-full bg-safe/15 text-safe font-medium">● {aiProvider === 'groq' ? 'Groq connected' : 'Ollama connected'}</span>
           )}
           <select
             value={lang}
