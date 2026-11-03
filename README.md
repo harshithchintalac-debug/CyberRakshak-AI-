@@ -66,6 +66,7 @@ cyberrakshak-v2/
 
 ### 1. Prerequisites
 - Python 3.11+
+- The repository `.python-version` pins Render deployments to Python 3.11, which is compatible with the pinned Pydantic dependencies.
 - Node 18+
 - MongoDB running locally (or a connection string to Atlas)
 - [Ollama](https://ollama.com) installed, with a model pulled — e.g.:
